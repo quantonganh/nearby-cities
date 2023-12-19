@@ -1,0 +1,38 @@
+{{ define "content" }}
+<h3 class="text-center my-4">Find cities near</h3>
+<div class="d-flex justify-content-center">
+    <form class="d-flex align-items-center" action="/search">
+        <input class="form-control" type="search" id="city" name="city" required value="{{ .City }}">
+        <button type="submit" class="btn btn-primary mx-2">Go</button>
+    </form>
+</div>
+
+{{ if gt (len .Cities) 0 }}
+<table class="table table-bordered my-5">
+    <thead>
+        <tr>
+            <th scope="col">City</th>
+            <th scope="col">Latitude</th>
+            <th scope="col">Longitude</th>
+            <th scope="col">Geohash</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range $_, $c := .Cities }}
+        <tr>
+            <td><a href="https://www.google.com/maps/place/{{ $c.Lat }},{{ $c.Lng }}">{{ $c.City
+                    }}, {{ if ne $c.City $c.AdminName }}{{ $c.AdminName }}, {{ end }}{{
+                    $c.Country }}</a></td>
+            <td>{{ $c.Lat }}</td>
+            <td>{{ $c.Lng }}</td>
+            <td>{{ $c.Geohash }}
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<h6 class="text-center my-4">
+    {{ .Message }}
+</h6>
+{{ end }}
+{{ end }}
