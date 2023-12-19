@@ -3,85 +3,35 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"embed"
 	"fmt"
+	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strconv"
+	"regexp"
 	"syscall"
+	"time"
 
+	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/quantonganh/geohash"
+	"github.com/quantonganh/httperror"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
 )
 
-type handler func(w http.ResponseWriter, r *http.Request)
+//go:embed templates/*.html
+var htmlFS embed.FS
 
-func nearby(db *sql.DB) handler {
-	return func(w http.ResponseWriter, r *http.Request) {
-		latStr := r.URL.Query().Get("latitude")
-		lat, err := strconv.ParseFloat(latStr, 64)
-		if err != nil {
-			http.Error(w, "Invalid latitude parameter", http.StatusBadRequest)
-			return
-		}
+//go:embed static
+var staticFS embed.FS
 
-		lngStr := r.URL.Query().Get("longitude")
-		lng, err := strconv.ParseFloat(lngStr, 64)
-		if err != nil {
-			http.Error(w, "Invalid longitude parameter", http.StatusBadRequest)
-			return
-		}
-
-		radiusStr := r.URL.Query().Get("radius")
-		radius, err := strconv.ParseFloat(radiusStr, 64)
-		if err != nil {
-			http.Error(w, "Invalid radius parameter", http.StatusBadRequest)
-			return
-		}
-
-		minLat, maxLat, minLng, maxLng := geohash.BoundingBox(lat, lng, radius)
-		swGeohash := geohash.Encode(minLat, minLng)
-		neGeohash := geohash.Encode(maxLat, maxLng)
-
-		rows, err := db.Query(`
-			SELECT c.city, c.lat, c.lng, c.country, g.geohash
-			FROM cities c JOIN geospatial_index g ON g.city_id = c.id
-			WHERE g.geohash BETWEEN ? and ?;
-		`, swGeohash, neGeohash)
-		if err != nil {
-			http.Error(w, "Database query error", http.StatusInternalServerError)
-			return
-		}
-
-		type city struct {
-			Name      string  `json:"name"`
-			Latitude  float64 `json:"lat"`
-			Longitude float64 `json:"lng"`
-			Country   string  `json:"country"`
-			Geohash   string  `json:"geohash"`
-		}
-		cities := make([]city, 0)
-		for rows.Next() {
-			var c city
-			if err := rows.Scan(&c.Name, &c.Latitude, &c.Longitude, &c.Country, &c.Geohash); err != nil {
-				http.Error(w, "Error scanning database rows", http.StatusInternalServerError)
-				return
-			}
-			cities = append(cities, c)
-		}
-
-		data, err := json.Marshal(cities)
-		if err != nil {
-			http.Error(w, "Error marshaling JSON response", http.StatusInternalServerError)
-			return
-		}
-
-		w.Write(data)
-	}
-}
+//go:embed worldcities.csv
+var worldCitiesCSV string
 
 func main() {
 	db, err := sql.Open("sqlite3", "nearby_cities.db")
@@ -93,12 +43,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/v1/cities/nearby", nearby(db))
+	zlog := zerolog.New(os.Stdout).With().
+		Timestamp().
+		Logger()
 
-	server := &http.Server{
-		Addr: ":8080",
+	r := mux.NewRouter()
+	r.Use(hlog.NewHandler(zlog))
+	r.Use(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
+		hlog.FromRequest(r).Info().
+			Str("method", r.Method).
+			Stringer("url", r.URL).
+			Int("status", status).
+			Int("size", size).
+			Dur("duration", duration).
+			Msg("")
+	}))
+	r.Use(hlog.UserAgentHandler("user_agent"))
+	r.Use(hlog.RefererHandler("referer"))
+	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
+
+	tmpl, err := template.New("index.html").ParseFS(htmlFS, "templates/*.html")
+	if err != nil {
+		log.Fatal(err)
 	}
 
+	r.PathPrefix("/static/").Handler(http.FileServer(http.FS(staticFS)))
+	r.Handle("/", errorHandler(indexHandler(tmpl)))
+	r.Handle("/search", errorHandler(searchHandler(db, tmpl)))
+
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
 	go func() {
 		fmt.Printf("Server is listening on port %s...\n", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -135,8 +111,18 @@ func createSpatialIndex(db *sql.DB) error {
 		return fmt.Errorf("error checking migration status: %w", err)
 	}
 
+	tmpFile, err := ioutil.TempFile("", "worldcities*.csv")
+	if err != nil {
+		return fmt.Errorf("error creating temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write([]byte(worldCitiesCSV)); err != nil {
+		return fmt.Errorf("error writing the embedded CSV content: %w", err)
+	}
+
 	if !migrationApplied {
-		cmd := exec.Command("sqlite3", "nearby_cities.db", "-cmd", ".mode csv", ".import worldcities.csv cities")
+		cmd := exec.Command("sqlite3", "nearby_cities.db", "-cmd", ".mode csv", fmt.Sprintf(".import %s cities", tmpFile.Name()))
 		_, err = cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error importing CSV data into cities table: %w", err)
@@ -151,6 +137,35 @@ func createSpatialIndex(db *sql.DB) error {
 		`)
 		if err != nil {
 			return fmt.Errorf("error creating goepatial_index table: %w", err)
+		}
+
+		_, err = db.Exec(`
+			CREATE VIRTUAL TABLE cities_fts USING fts5(
+				city,
+				city_ascii,
+				lat,
+				lng,
+				country,
+				iso2,
+				iso3,
+				admin_name,
+				capital,
+				population,
+				id,
+				content='cities',
+				tokenize='unicode61'
+			);
+		`)
+		if err != nil {
+			return fmt.Errorf("error creating cities_fts table: %w", err)
+		}
+
+		_, err = db.Exec(`
+			INSERT INTO cities_fts(city, city_ascii, lat, lng, country, iso2, iso3, admin_name, capital, population, id)
+			SELECT city, city_ascii, lat, lng, country, iso2, iso3, admin_name, capital, population, id FROM cities;
+		`)
+		if err != nil {
+			return fmt.Errorf("error populating the virtual table cities_fts: %w", err)
 		}
 
 		tx, err := db.Begin()
@@ -202,4 +217,99 @@ func createSpatialIndex(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+type PageData struct {
+	City    string
+	Radius  string
+	Cities  []city
+	Message string
+}
+
+type city struct {
+	City       string
+	CityAscii  string
+	Lat        float64
+	Lng        float64
+	Country    string
+	Iso2       string
+	Iso3       string
+	AdminName  string
+	Capital    string
+	Population string
+	ID         string
+	Geohash    string
+}
+
+func indexHandler(tmpl *template.Template) httperror.Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		return tmpl.ExecuteTemplate(w, "base", PageData{})
+	}
+}
+
+func searchHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		cityQuery := r.FormValue("city")
+		normalizedCity := normalizeQuery(cityQuery)
+
+		row := db.QueryRow(`
+			SELECT city, lat, lng, country FROM cities_fts WHERE cities_fts MATCH ? 
+			`, normalizedCity)
+		var c city
+		err := row.Scan(&c.City, &c.Lat, &c.Lng, &c.Country)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				data := PageData{
+					Message: "No matching city found.",
+				}
+
+				return tmpl.ExecuteTemplate(w, "base", data)
+			} else {
+				return err
+			}
+		}
+
+		hash := geohash.Encode(c.Lat, c.Lng)
+		length := geohash.EstimateLengthRequired(100)
+		rows, err := db.Query(`
+			SELECT c.city, c.lat, c.lng, c.admin_name, c.country, g.geohash
+			FROM cities c JOIN geospatial_index g ON g.city_id = c.id
+			WHERE g.geohash LIKE ?;
+		`, fmt.Sprintf("%s%%", hash[:length]))
+		if err != nil {
+			return err
+		}
+
+		cities := make([]city, 0)
+		for rows.Next() {
+			var c city
+			if err := rows.Scan(&c.City, &c.Lat, &c.Lng, &c.AdminName, &c.Country, &c.Geohash); err != nil {
+				return err
+			}
+			cities = append(cities, c)
+		}
+
+		data := PageData{
+			City:   cityQuery,
+			Cities: cities,
+		}
+
+		return tmpl.ExecuteTemplate(w, "base", data)
+	}
+}
+
+func normalizeQuery(query string) string {
+	re := regexp.MustCompile(`[\p{P}]`)
+	return re.ReplaceAllString(query, "")
+}
+
+func errorHandler(handler httperror.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := handler(w, r)
+		if err != nil {
+			// Handle the error and send an appropriate response
+			fmt.Println("Error:", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}
 }
