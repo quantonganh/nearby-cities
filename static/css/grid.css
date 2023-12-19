@@ -1,0 +1,33 @@
+* { box-sizing: border-box; }
+
+.grid:after {
+    content: '';
+    display: block;
+    clear: both;
+}
+
+.grid-sizer,
+.grid-item {
+    width: 33.333%;
+}
+@media (max-width: 575px) {
+    .grid-sizer,
+    .grid-item {
+        width: 100%;
+    }
+}
+@media (min-width: 576px) and (max-width: 767px) {
+    .grid-sizer,
+    .grid-item {
+        width: 50%;
+    }
+}
+
+.grid-item {
+    float: left;
+}
+
+.grid-item img {
+    display: block;
+    max-width: 100%;
+}
