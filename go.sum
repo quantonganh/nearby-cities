@@ -10,8 +10,8 @@ github.com/mattn/go-isatty v0.0.19/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D
 github.com/mattn/go-sqlite3 v1.14.18 h1:JL0eqdCOq6DJVNPSvArO/bIV9/P7fbGrV00LZHc+5aI=
 github.com/mattn/go-sqlite3 v1.14.18/go.mod h1:2eHXhiwb8IkHr+BDWZGa96P6+rkvnG63S2DGjv9HUNg=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
-github.com/quantonganh/geohash v0.0.2 h1:kXhYHovdnCo2EyKMKJt/DB6/UYDTdT69mdadjZX6SEM=
-github.com/quantonganh/geohash v0.0.2/go.mod h1:KmOusy8je/DpUOZcj/4xYZ7EPN8Tvn3x8mg89vk1dU4=
+github.com/quantonganh/geohash v0.0.3 h1:d52KjpPd9Nn+iL8IGo8y88F8ESIX2SRW2liVKphFQsI=
+github.com/quantonganh/geohash v0.0.3/go.mod h1:KmOusy8je/DpUOZcj/4xYZ7EPN8Tvn3x8mg89vk1dU4=
 github.com/quantonganh/httperror v0.0.1 h1:fwpSqXsu4gR1T/XcdLDqv9SNyikeEtSfFJlWZKsxZXQ=
 github.com/quantonganh/httperror v0.0.1/go.mod h1:wHpg3/Oa4yhMc0hPPoFitOFYonrRXI15rX1sYHzd7pI=
 github.com/rs/xid v1.5.0 h1:mKX4bl4iPYJtEIxp6CYiUuLQ/8DYMoz0PUdtGgMFRVc=

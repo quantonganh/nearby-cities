@@ -12,6 +12,7 @@
     <thead>
         <tr>
             <th scope="col">City</th>
+            <th scope="col">Distance</th>
             <th scope="col">Latitude</th>
             <th scope="col">Longitude</th>
             <th scope="col">Geohash</th>
@@ -23,6 +24,7 @@
             <td><a href="https://www.google.com/maps/place/{{ $c.Lat }},{{ $c.Lng }}">{{ $c.City
                     }}, {{ if ne $c.City $c.AdminName }}{{ $c.AdminName }}, {{ end }}{{
                     $c.Country }}</a></td>
+            <td>{{ $c.Distance }} km</td>
             <td>{{ $c.Lat }}</td>
             <td>{{ $c.Lng }}</td>
             <td>{{ $c.Geohash }}

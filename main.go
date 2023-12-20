@@ -8,11 +8,13 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"sort"
 	"syscall"
 	"time"
 
@@ -239,6 +241,7 @@ type city struct {
 	Population string
 	ID         string
 	Geohash    string
+	Distance   float64
 }
 
 func indexHandler(tmpl *template.Template) httperror.Handler {
@@ -255,8 +258,8 @@ func searchHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 		row := db.QueryRow(`
 			SELECT city, lat, lng, country FROM cities_fts WHERE cities_fts MATCH ? 
 			`, normalizedCity)
-		var c city
-		err := row.Scan(&c.City, &c.Lat, &c.Lng, &c.Country)
+		var fromCity city
+		err := row.Scan(&fromCity.City, &fromCity.Lat, &fromCity.Lng, &fromCity.Country)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				data := PageData{
@@ -269,7 +272,7 @@ func searchHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 			}
 		}
 
-		hash := geohash.Encode(c.Lat, c.Lng)
+		hash := geohash.Encode(fromCity.Lat, fromCity.Lng)
 		length := geohash.EstimateLengthRequired(100)
 		rows, err := db.Query(`
 			SELECT c.city, c.lat, c.lng, c.admin_name, c.country, g.geohash
@@ -282,12 +285,19 @@ func searchHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 
 		cities := make([]city, 0)
 		for rows.Next() {
-			var c city
-			if err := rows.Scan(&c.City, &c.Lat, &c.Lng, &c.AdminName, &c.Country, &c.Geohash); err != nil {
+			var toCity city
+			if err := rows.Scan(&toCity.City, &toCity.Lat, &toCity.Lng, &toCity.AdminName, &toCity.Country, &toCity.Geohash); err != nil {
 				return err
 			}
-			cities = append(cities, c)
+
+			distance := geohash.Distance(fromCity.Lat, fromCity.Lng, toCity.Lat, toCity.Lng)
+			toCity.Distance = math.Round(distance*100) / 100
+			cities = append(cities, toCity)
 		}
+
+		sort.Slice(cities, func(i, j int) bool {
+			return cities[i].Distance < cities[j].Distance
+		})
 
 		data := PageData{
 			City:   cityQuery,
