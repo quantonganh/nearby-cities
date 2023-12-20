@@ -23,8 +23,11 @@ jobs:
     - name: Test
       run: go test -v ./...
 
+    - name: Install AArch64 target toolchain
+      run: sudo apt-get install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+
     - name: Build
-      run: CGO_ENABLED=1 GOARCH=arm64 go build -o nearby-cities --tags "fts5" -v -ldflags="-s -w" main.go
+      run: CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ CGO_ENABLED=1 GOARCH=arm64 go build -o nearby-cities --tags "fts5" -v -ldflags="-s -w" main.go
 
     - name: Set up QEMU
       if: github.event_name == 'push'
