@@ -1,7 +1,5 @@
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
-github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
-github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
@@ -12,8 +10,8 @@ github.com/mattn/go-sqlite3 v1.14.18/go.mod h1:2eHXhiwb8IkHr+BDWZGa96P6+rkvnG63S
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/quantonganh/geohash v0.0.3 h1:d52KjpPd9Nn+iL8IGo8y88F8ESIX2SRW2liVKphFQsI=
 github.com/quantonganh/geohash v0.0.3/go.mod h1:KmOusy8je/DpUOZcj/4xYZ7EPN8Tvn3x8mg89vk1dU4=
-github.com/quantonganh/httperror v0.0.1 h1:fwpSqXsu4gR1T/XcdLDqv9SNyikeEtSfFJlWZKsxZXQ=
-github.com/quantonganh/httperror v0.0.1/go.mod h1:wHpg3/Oa4yhMc0hPPoFitOFYonrRXI15rX1sYHzd7pI=
+github.com/quantonganh/httperror v0.0.2 h1:Gmq7QntqG6w6N2Ns4364uGslOJM8fAQf/8+8Akh6JAc=
+github.com/quantonganh/httperror v0.0.2/go.mod h1:wHpg3/Oa4yhMc0hPPoFitOFYonrRXI15rX1sYHzd7pI=
 github.com/rs/xid v1.5.0 h1:mKX4bl4iPYJtEIxp6CYiUuLQ/8DYMoz0PUdtGgMFRVc=
 github.com/rs/xid v1.5.0/go.mod h1:trrq9SKmegXys3aeAKXMUTdJsYXVwGY3RLcfgqegfbg=
 github.com/rs/zerolog v1.31.0 h1:FcTR3NnLWW+NnTwwhFWiJSZr4ECLpqCm6QsEnyvbV4A=

@@ -2,12 +2,12 @@
 <h3 class="text-center my-4">Find cities near</h3>
 <div class="d-flex justify-content-center">
     <form class="d-flex align-items-center" action="/search">
-        <input class="form-control" type="search" id="city" name="city" required value="{{ .City }}">
+        <input class="form-control" type="search" id="city" name="city" required value="{{ .FromCity }}">
         <button type="submit" class="btn btn-primary mx-2">Go</button>
     </form>
 </div>
 
-{{ if gt (len .Cities) 0 }}
+{{ if gt (len .NearbyCities) 0 }}
 <table class="table table-bordered my-5">
     <thead>
         <tr>
@@ -19,7 +19,7 @@
         </tr>
     </thead>
     <tbody>
-        {{ range $_, $c := .Cities }}
+        {{ range $_, $c := .NearbyCities }}
         <tr>
             <td><a href="https://www.google.com/maps/place/{{ $c.Lat }},{{ $c.Lng }}">{{ $c.City
                     }}, {{ if ne $c.City $c.AdminName }}{{ $c.AdminName }}, {{ end }}{{
