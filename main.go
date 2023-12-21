@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"syscall"
@@ -26,6 +27,8 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
+const dbPath = "./db/nearby_cities.db"
+
 //go:embed templates/*.html
 var htmlFS embed.FS
 
@@ -36,7 +39,12 @@ var staticFS embed.FS
 var worldCitiesCSV string
 
 func main() {
-	db, err := sql.Open("sqlite3", "nearby_cities.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		fmt.Printf("Error creating directories: %v\n", err)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -163,13 +171,13 @@ func prepare(db *sql.DB) error {
 			return fmt.Errorf("error creating ip2location table: %w", err)
 		}
 
-		cmd := exec.Command("sqlite3", "nearby_cities.db", "-cmd", ".mode csv", fmt.Sprintf(".import %s ip2location", ip2LocationFile.Name()))
+		cmd := exec.Command("sqlite3", dbPath, "-cmd", ".mode csv", fmt.Sprintf(".import %s ip2location", ip2LocationFile.Name()))
 		_, err = cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error importing CSV data into ip2location table: %w", err)
 		}
 
-		cmd = exec.Command("sqlite3", "nearby_cities.db", "-cmd", ".mode csv", fmt.Sprintf(".import %s cities", worldCitiesFile.Name()))
+		cmd = exec.Command("sqlite3", dbPath, "-cmd", ".mode csv", fmt.Sprintf(".import %s cities", worldCitiesFile.Name()))
 		_, err = cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error importing CSV data into cities table: %w", err)
