@@ -367,7 +367,12 @@ func searchHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 
 				return tmpl.ExecuteTemplate(w, "base", data)
 			} else {
-				return err
+				hlog.FromRequest(r).Err(err).Msg("")
+				data := PageData{
+					Message: "Oops! Something went wrong. Please try again later.",
+				}
+
+				return tmpl.ExecuteTemplate(w, "base", data)
 			}
 		}
 
@@ -424,15 +429,4 @@ func findNearbyCities(db *sql.DB, fromCity string) ([]city, error) {
 func normalizeQuery(query string) string {
 	re := regexp.MustCompile(`[\p{P}]`)
 	return re.ReplaceAllString(query, "")
-}
-
-func errorHandler(handler httperror.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := handler(w, r)
-		if err != nil {
-			// Handle the error and send an appropriate response
-			fmt.Println("Error:", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
-	}
 }
