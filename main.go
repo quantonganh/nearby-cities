@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	ip2LocationFileName    = "IP2LOCATION-LITE-DB3.CSV"
+	ip2LocationFileName    = "IP2LOCATION-LITE-DB5.CSV"
 	ip2LocationZipFileName = ip2LocationFileName + ".zip"
 	dbPath                 = "./db/nearby_cities.db"
 )
@@ -157,6 +157,8 @@ func prepare(db *sql.DB) error {
 			country TEXT,
 			city TEXT,
 			region TEXT,
+			lat TEXT,
+			lng TEXT
 		);
 		`)
 		if err != nil {
@@ -262,7 +264,7 @@ func prepare(db *sql.DB) error {
 
 func downloadIP2LocationDB() error {
 	token := os.Getenv("IP2LOCATION_TOKEN")
-	resp, err := http.Get(fmt.Sprintf("https://www.ip2location.com/download/?token=%s&file=DB3LITE", token))
+	resp, err := http.Get(fmt.Sprintf("https://www.ip2location.com/download/?token=%s&file=DB5LITE", token))
 	if err != nil {
 		return err
 	}
@@ -325,6 +327,8 @@ type IP2LocationData struct {
 	Country string
 	Region  string
 	City    string
+	Lat     float64
+	Lng     float64
 }
 
 type city struct {
@@ -363,14 +367,14 @@ func indexHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 		}
 
 		row := db.QueryRow(`
-			SELECT start_ip, end_ip, city, region, country FROM ip2location WHERE ? BETWEEN start_ip AND end_ip ORDER BY end_ip LIMIT 1
+			SELECT start_ip, end_ip, country, region, city, lat, lng FROM ip2location WHERE ? BETWEEN start_ip AND end_ip ORDER BY end_ip LIMIT 1
 			`, ipInteger)
 		var ip2Loc IP2LocationData
-		if err = row.Scan(&ip2Loc.StartIP, &ip2Loc.EndIP, &ip2Loc.City, &ip2Loc.Region, &ip2Loc.Country); err != nil {
+		if err = row.Scan(&ip2Loc.StartIP, &ip2Loc.EndIP, &ip2Loc.Country, &ip2Loc.Region, &ip2Loc.City, &ip2Loc.Lat, &ip2Loc.Lng); err != nil {
 			return tmpl.ExecuteTemplate(w, "base", PageData{})
 		}
 
-		cities, err := findNearbyCities(db, fmt.Sprintf("%s %s", ip2Loc.City, ip2Loc.Region))
+		cities, err := findNearbyCitiesByLatLng(db, ip2Loc.Lat, ip2Loc.Lng)
 		if err != nil {
 			return tmpl.ExecuteTemplate(w, "base", PageData{})
 		}
@@ -441,7 +445,11 @@ func findNearbyCities(db *sql.DB, fromCity string) ([]city, error) {
 		return nil, err
 	}
 
-	hash := geohash.Encode(c.Lat, c.Lng)
+	return findNearbyCitiesByLatLng(db, c.Lat, c.Lng)
+}
+
+func findNearbyCitiesByLatLng(db *sql.DB, lat, lng float64) ([]city, error) {
+	hash := geohash.Encode(lat, lng)
 	length := geohash.EstimateLengthRequired(100)
 	rows, err := db.Query(`
 			SELECT c.city, c.lat, c.lng, c.admin_name, c.country, g.geohash
@@ -459,7 +467,7 @@ func findNearbyCities(db *sql.DB, fromCity string) ([]city, error) {
 			return nil, err
 		}
 
-		distance := geohash.Distance(c.Lat, c.Lng, toCity.Lat, toCity.Lng)
+		distance := geohash.Distance(lat, lng, toCity.Lat, toCity.Lng)
 		toCity.Distance = math.Round(distance*100) / 100
 		cities = append(cities, toCity)
 	}
