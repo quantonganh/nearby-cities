@@ -361,6 +361,10 @@ func indexHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 			return tmpl.ExecuteTemplate(w, "base", PageData{})
 		}
 
+		if isPrivateIP(net.ParseIP(ip)) {
+			return tmpl.ExecuteTemplate(w, "base", PageData{})
+		}
+
 		ipInteger, err := ipToInteger(ip)
 		if err != nil {
 			return tmpl.ExecuteTemplate(w, "base", PageData{})
@@ -386,6 +390,43 @@ func indexHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 
 		return tmpl.ExecuteTemplate(w, "base", data)
 	}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	privateIPv4Ranges := []struct {
+		start net.IP
+		end   net.IP
+	}{
+		{
+			net.ParseIP("10.0.0.0"),
+			net.ParseIP("10.255.255.255"),
+		},
+		{
+			net.ParseIP("172.16.0.0"),
+			net.ParseIP("172.31.255.255"),
+		},
+		{
+			net.ParseIP("192.168.0.0"),
+			net.ParseIP("192.168.255.255"),
+		},
+	}
+
+	for _, r := range privateIPv4Ranges {
+		if bytesWithinRange(ip.To4(), r.start.To4(), r.end.To4()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func bytesWithinRange(b, start, end []byte) bool {
+	for i := 0; i < len(b); i++ {
+		if b[i] < start[i] || b[i] > end[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func ipToInteger(ipAddr string) (uint32, error) {
