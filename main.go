@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
 	"embed"
@@ -27,7 +28,11 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
-const dbPath = "./db/nearby_cities.db"
+const (
+	ip2LocationFileName    = "IP2LOCATION-LITE-DB3.CSV"
+	ip2LocationZipFileName = ip2LocationFileName + ".zip"
+	dbPath                 = "./db/nearby_cities.db"
+)
 
 //go:embed templates/*.html
 var htmlFS embed.FS
@@ -123,27 +128,16 @@ func prepare(db *sql.DB) error {
 	}
 
 	if !migrationApplied {
-		token := os.Getenv("IP2LOCATION_TOKEN")
-		resp, err := http.Get(fmt.Sprintf("https://www.ip2location.com/download/?token=%s&file=DB3LITE", token))
-		if err != nil {
+		if err := downloadIP2LocationDB(); err != nil {
 			return err
 		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		ip2LocationFile, err := os.CreateTemp("", "IP2LOCATION-LITE-DB3*.csv")
+		cmd := exec.Command("sqlite3", dbPath, "-cmd", fmt.Sprintf(".import --csv --skip 1 %s ip2location", ip2LocationFileName))
+		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("error creating ip2Location file: %w", err)
+			return fmt.Errorf("error importing CSV data into ip2location table: %s: %w", string(output), err)
 		}
-		defer os.Remove(ip2LocationFile.Name())
-
-		_, err = io.Copy(ip2LocationFile, resp.Body)
-		if err != nil {
-			return err
-		}
+		defer os.Remove(ip2LocationFileName)
 
 		worldCitiesFile, err := os.CreateTemp("", "worldcities*.csv")
 		if err != nil {
@@ -163,24 +157,16 @@ func prepare(db *sql.DB) error {
 			country TEXT,
 			city TEXT,
 			region TEXT,
-			lat TEXT,
-			lng TEXT
 		);
 		`)
 		if err != nil {
 			return fmt.Errorf("error creating ip2location table: %w", err)
 		}
 
-		cmd := exec.Command("sqlite3", dbPath, "-cmd", ".mode csv", fmt.Sprintf(".import %s ip2location", ip2LocationFile.Name()))
-		_, err = cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("error importing CSV data into ip2location table: %w", err)
-		}
-
 		cmd = exec.Command("sqlite3", dbPath, "-cmd", ".mode csv", fmt.Sprintf(".import %s cities", worldCitiesFile.Name()))
-		_, err = cmd.CombinedOutput()
+		output, err = cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("error importing CSV data into cities table: %w", err)
+			return fmt.Errorf("error importing CSV data into cities table: %s: %w", string(output), err)
 		}
 
 		_, err = db.Exec(`
@@ -274,6 +260,65 @@ func prepare(db *sql.DB) error {
 	return nil
 }
 
+func downloadIP2LocationDB() error {
+	token := os.Getenv("IP2LOCATION_TOKEN")
+	resp, err := http.Get(fmt.Sprintf("https://www.ip2location.com/download/?token=%s&file=DB3LITE", token))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	file, err := os.Create(ip2LocationZipFileName)
+	if err != nil {
+		return fmt.Errorf("error creating ip2Location file: %w", err)
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	r, err := zip.OpenReader(ip2LocationZipFileName)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, file := range r.File {
+		if file.Name != ip2LocationFileName {
+			continue
+		}
+
+		outFile, err := os.Create(ip2LocationFileName)
+		if err != nil {
+			return err
+		}
+		defer outFile.Close()
+
+		rc, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		_, err = io.Copy(outFile, rc)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := os.Remove(ip2LocationZipFileName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type IP2LocationData struct {
 	StartIP uint32
 	EndIP   uint32
@@ -318,7 +363,7 @@ func indexHandler(db *sql.DB, tmpl *template.Template) httperror.Handler {
 		}
 
 		row := db.QueryRow(`
-			SELECT start_ip, end_ip, city, region, country FROM ip2location WHERE ? BETWEEN start_ip AND end_ip 
+			SELECT start_ip, end_ip, city, region, country FROM ip2location WHERE ? BETWEEN start_ip AND end_ip ORDER BY end_ip LIMIT 1
 			`, ipInteger)
 		var ip2Loc IP2LocationData
 		if err = row.Scan(&ip2Loc.StartIP, &ip2Loc.EndIP, &ip2Loc.City, &ip2Loc.Region, &ip2Loc.Country); err != nil {
